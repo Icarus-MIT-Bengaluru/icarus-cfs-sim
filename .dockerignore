@@ -1,0 +1,7 @@
+.git
+.gitmodules
+**/.DS_Store
+controllers/*/logs/*
+!controllers/*/logs/.gitkeep
+cfs/.git
+cfs/build-*
