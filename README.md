@@ -62,10 +62,3 @@ separate persistent logs, and the on-board computer completes a verified UDP
 hello/ack exchange with each of the three simulators. The subsystem cFS
 applications arrive in Phase 4. See the
 [ICARUS Status Report](docs/status.md).
-
-## License
-
-No license has been declared for this repository yet.
-
-Disclaimer: This is a development and simulation skeleton. It is not flight
-software and must not be flown.
