@@ -47,8 +47,9 @@ change in project direction and requires the user's agreement.
    instances. With one cFS instance there is nothing to bridge, so SBN adds
    confusion and attack surface for no benefit. The OBC apps use a simple UDP
    simulator protocol instead — see [peripherals.md](peripherals.md).
-   (The stock cFS mission config loads SBN by default; removing it is Phase 4
-   work — see [cfs-notes.md](cfs-notes.md#sbn-loads-by-default).)
+   The stock cFS mission config loads SBN by default; the ICARUS mission
+   overlay removes it, and as of 2026-10-17 **the OBC no longer builds or
+   starts SBN** — see [cfs-notes.md](cfs-notes.md#sbn-loads-by-default).
 3. **The cFS Software Bus is used only inside the OBC**, from Phase 4 onward.
    UDP is the OBC-to-simulator transport. These two are never conflated:
    proving a UDP packet arrived is not proving SB routing.

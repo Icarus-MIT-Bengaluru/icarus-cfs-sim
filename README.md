@@ -56,11 +56,35 @@ documents the rules this project is developed under.
 
 ## Status
 
-Phases 1 through 3 are implemented and verified: one cFS instance reaches
-operational state, four containers run independently on an internal bridge with
-separate persistent logs, and the on-board computer completes a verified UDP
-hello/ack exchange with each of the three simulators. The subsystem cFS
-applications arrive in Phase 4. See the
+**All seven phases are implemented and verified, and the project meets its
+completion criteria.** The seven gates were last re-run in sequence on
+2026-10-19, followed by a 68-assertion sweep of one live stack.
+
+*   **Phases 1-3** — one cFS instance reaches operational state; four
+    containers run independently on an internal bridge with separate persistent
+    logs; the on-board computer completes a verified UDP hello/ack exchange with
+    each of the three simulators.
+*   **Phase 4** — `adcs_sim`, `payload_sim` and `comms_sim` run as separate cFS
+    applications with their own message IDs, event IDs, logs and UDP routes. The
+    mission overlay removes SBN, and isolation is proven: disabling one app
+    leaves the other two and their controller links running.
+*   **Phase 5** — `sch_lab` drives each app's periodic activity at a documented
+    rate of 10 Hz, 1 Hz and 0.1 Hz, and the measured rates land within 0.1% of
+    nominal.
+*   **Phase 6** — six faults (app stall, app exit, controller stop, controller
+    disconnect, malformed input, and an unavailable log mount) are each injected
+    independently and shown to be detected, attributed and contained without
+    affecting unrelated components.
+*   **Phase 7** — a stalled app is recovered by Executive Services ground
+    command, a stopped controller by restarting its container, and the OBC by
+    restarting its own; each returns to nominal without duplicate app
+    registrations or an image rebuild, and a recovery that cannot succeed stays
+    visibly degraded rather than reporting normal.
+
+The application function bodies are deliberate skeletons, ready to be filled in:
+the gates prove integration, isolation, scheduling, fault containment and
+recovery, not subsystem behaviour. CPU-hog detection and watchdog arming are not
+available in this container and are not claimed. See the
 [ICARUS Status Report](docs/status.md).
 
 ## License

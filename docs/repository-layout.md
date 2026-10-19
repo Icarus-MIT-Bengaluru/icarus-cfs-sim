@@ -37,10 +37,17 @@ icarus-cfs-sim/
 │       ├── config/runtime.env     # icarus-comms, UDP port 31003
 │       └── logs/                  # Comms simulator log mount
 │
-└── apps/
-    ├── adcs_sim/                  # Phase 4 project-owned cFS app source
-    ├── payload_sim/               # Phase 4 project-owned cFS app source
-    └── comms_sim/                 # Phase 4 project-owned cFS app source
+└── apps/                          # Project-owned cFS applications (Phase 4)
+    ├── adcs_sim/
+    │   ├── CMakeLists.txt         # Module definition and source list
+    │   ├── arch_build.cmake       # Platform-scope generated config headers
+    │   ├── mission_build.cmake    # Mission-scope generated config headers
+    │   ├── config/                # Default config header set
+    │   ├── fsw/inc/               # Event IDs, topic IDs, fcn codes, cfg
+    │   ├── fsw/src/               # App, cmds, dispatch, and UDP adapter
+    │   └── unit-test/             # Coverage-test harness
+    ├── payload_sim/               # Same structure, its own IDs and port
+    └── comms_sim/                 # Same structure, its own IDs and port
 ```
 
 Directories for later phases exist now to establish the final layout. They
@@ -60,7 +67,7 @@ stay intentionally inactive until their assigned phase — see
 | `controllers/udp-echo-server.c` | The shared device-simulator server. Reusable controller source belongs here, not under one controller |
 | `controllers/obc/config/mission/` | ICARUS-owned cFS configuration: app registration, message IDs, scheduler tables, UDP endpoint settings. Empty until Phase 4 |
 | `controllers/*/logs/` | Host-mounted persistent evidence. Generated files are Git-ignored except `.gitkeep` |
-| `apps/<name>_sim/` | Exactly one independently built cFS application each |
+| `apps/<name>_sim/` | Exactly one independently built cFS application each. Both `arch_build.cmake` **and** `mission_build.cmake` are required — they declare the platform- and mission-scope generated config headers respectively, and omitting the latter breaks the table builds |
 
 ## Rules for changes
 

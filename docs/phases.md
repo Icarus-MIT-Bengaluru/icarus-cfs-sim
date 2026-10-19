@@ -11,10 +11,10 @@ Current progress is tracked in [status.md](status.md).
 | 1 | One cFS OBC reaches operational state | **Passed** |
 | 2 | Four containers run independently on an isolated network | **Passed** |
 | 3 | OBC can reach each controller over UDP | **Passed** |
-| 4 | The three subsystems are separate cFS applications | Not started |
-| 5 | SCH drives deterministic activity at declared rates | Not started |
-| 6 | Faults are visible and contained | Not started |
-| 7 | The recovery ladder restores nominal operation | Not started |
+| 4 | The three subsystems are separate cFS applications | **Passed** |
+| 5 | SCH drives deterministic activity at declared rates | **Passed** |
+| 6 | Faults are visible and contained | **Passed** |
+| 7 | The recovery ladder restores nominal operation | **Passed** |
 
 ---
 
@@ -134,9 +134,48 @@ EVS event design.
    distinct app logs, unique event/message IDs, and isolation — by deliberately
    disabling one app and confirming the other two continue.
 
+**Status: gate passed 2026-10-17** with 13/13 assertions, including the
+isolation proof. The app **function bodies remain deliberate skeletons** — the
+gate proves integration and isolation, not subsystem behaviour. That is the
+agreed scope, not an outstanding defect.
+
+**Decisions taken before implementation (2026-10-17, by the user):**
+
+1. **Per-app logs are produced at the boundary, not by the app.** Each app emits
+   only EVS events, staying idiomatic cFS; the OBC entrypoint parses the console
+   stream and routes lines to `adcs_sim.log`, `payload_sim.log`, and
+   `comms_sim.log` by app name. This satisfies the
+   [logging contract](testing.md#logging-contract) without putting filesystem
+   access in an app. Accepted trade-off: the three files come from one filtered
+   stream rather than three independent writers, so "separate logs" is a property
+   of the splitter, not of the apps — Phase 6 evidence must not overclaim here.
+2. **The overlay keeps a minimal stock app set:** `sch_lab` (required by Phase 5),
+   `hs` (required by Phase 6), and `ci_lab` + `to_lab` (a command/telemetry path
+   for interactive debugging). **SBN and the other ten** (`cf`, `ds`, `fm`, `lc`,
+   `sc`, `md`, `mm`, `cs`, `hk`, `sample_app`) are dropped.
+
+**Defaults I will apply unless told otherwise:** three non-overlapping topic-ID
+blocks per cFS convention via each app's `*_topicid_values.h`; the Phase 3
+`udp-probe` stays in the image as a transport-only regression tool; and the
+Phase 4 heartbeat runs on a simple self-driven wakeup, with SCH taking over the
+timing in Phase 5 (not earlier).
+
 **Gate:** all three apps load separately; each produces its own hello evidence
 and touches only its designated controller route; stopping one does not stop
 unrelated apps or controller containers.
+
+**What `run.sh phase 4` checks today** (6 assertions, all passing): the Phase 3
+gate re-verified; each app loaded from its own `.so`; each emitted its startup
+hello; none exited; each has its own non-empty log containing no other app's
+events; each greeted only its own controller; and the topic-ID and event-ID
+blocks are unique across all three.
+
+**The isolation proof** restarts the OBC with `adcs_sim` dropped from the
+startup script (via `ICARUS_DISABLED_APPS`, a test affordance in the OBC
+entrypoint — no rebuild needed) and requires: cFE still reaches OPERATIONAL;
+the disabled app is neither loaded nor heartbeating; its controller route goes
+quiet and no other app takes it over; both surviving apps stay loaded, keep
+heartbeating, and keep their own routes; and all three return when re-enabled.
 
 ---
 
@@ -160,9 +199,26 @@ telemetry.
 4. Keep app logs separate; retain the validation report in
    `controllers/obc/logs/phase-5-verification.log`.
 
+**Status: gate passed 2026-10-17** with 6/6 assertions.
+
+**Rate assignment** (authoritative copy is the schedule table):
+
+| App | Rate | `PacketRate` | Measured |
+|---|---|---|---|
+| `adcs_sim` | 10 Hz | 1 (100 ms) | 9.9950 Hz, jitter 89.5–116.8 ms |
+| `payload_sim` | 1 Hz | 10 (1.0 s) | 0.9995 Hz, jitter 992.8–1019.9 ms |
+| `comms_sim` | 0.1 Hz | 100 (10.0 s) | 0.1000 Hz, jitter 9997.5–10012.1 ms |
+
+**Declared tolerance:** mean interval within **±5%** of nominal, and no single
+interval above **2× nominal**. Sequence numbers must be contiguous, which is
+what catches missing and duplicate wakeups. There is deliberately **no
+minimum-interval assertion**: `sch_lab` hands ticks over a counting semaphore,
+so queued ticks are consumed back-to-back after a stall and a short interval is
+legitimate catch-up, not a fault.
+
 **Gate:** all three activities appear at their declared rates for the full test
-window within an explicitly documented tolerance. Missing, duplicate, or late
-wakeups fail the phase.
+window within that tolerance. Missing, duplicate, or late wakeups fail the
+phase.
 
 ---
 
@@ -188,6 +244,29 @@ containment.
    other two paths continue. For malformed UDP input, the target controller logs
    the rejection and stays alive. For app faults, HS emits detection evidence.
    Malformed input never terminates cFE or another app.
+
+**Status: gate passed 2026-10-18** with 17/17 assertions across six faults.
+
+| # | Fault | Injection | Detection |
+|---|---|---|---|
+| 1 | App stall (alive, not working) | `INJECT_STALL` via ci_lab | HS EID 41 `App Monitor Failure ... Action: Event Only` |
+| 2 | App controlled exit | `CFE_ES_STOP_APP` via ci_lab | `CFE_ES_ExitApp` + HS name-not-found |
+| 3 | Controller stopped | `docker stop` | probe exit 5, `resolve-failed` |
+| 4 | Controller unreachable | `docker network disconnect` | probe nonzero, container still alive |
+| 5 | Malformed/oversize UDP | bad datagrams | all four `REJECT` reasons, `restarts=0` |
+| 6 | Unavailable log mount | read-only `/logs` on a controller **and** the OBC | warning emitted, process keeps running |
+
+Every fault also asserts containment: unrelated apps keep their rates, and
+unrelated controller routes keep answering.
+
+**Explicitly OUT of scope — not demonstrable in this container.** The
+`linux_sysmon` PSP module cannot read `/proc/schedstat`, so `HS_AppInit`
+returns early and two things never initialise: **CPU-utilisation/hogging
+detection** and **HS watchdog arming** (`CFE_PSP_WatchdogSet/Service/Enable`).
+Application monitoring is unaffected and is what this gate uses. The
+"watchdog boundaries" concept in this phase's cFS-concepts list is therefore
+**documented as not demonstrable rather than claimed**. See
+[cfs-notes.md](cfs-notes.md#hs-system-monitor-fails-in-a-container).
 
 **Gate:** every injected fault has a traceable source and a detection event;
 unrelated paths stay live; no fault silently disappears.
@@ -216,8 +295,39 @@ sequencing, recovery verification.
 5. Add `run.sh phase 7` with bounded checks and a full recovery timeline in
    `controllers/obc/logs/phase-7-verification.log`.
 
+**Status: gate passed 2026-10-19** with 16/16 assertions.
+
+| Rung | Scope | Mechanism | Proven |
+|---|---|---|---|
+| 1 | One app | `CFE_ES_RESTART_APP` by ground command | A **hard-stalled** app (blocked in `OS_TaskDelay`) is recovered: restarted once, re-initialised, state reset (`wakeup seq=1`), back at its declared rate, own route working, other two apps untouched, HS re-armed |
+| 2 | One controller | `docker start` | Restarted, rebound its port, UDP exchange resumed, **pre-fault log evidence preserved**, other two routes unaffected |
+| 3 | The OBC | container restart | cFE OPERATIONAL, all three apps loaded **exactly once**, schedule restored (all three rates re-measured), all three transport paths back, controllers untouched, **image unchanged** |
+| — | Failed recovery | restart an app that is not loaded | Refused, reported (`GetAppIDByName failed`), and left visibly degraded — never reported normal |
+
+**Recovery order is documented in the mission config**, as this phase requires:
+[`controllers/obc/config/mission/README.md`](../controllers/obc/config/mission/README.md).
+
 **Gate:** each rung returns its component to the declared nominal state without
 duplicate app registrations, stale subscriptions, or loss of independent log
 evidence — and **without manually rebuilding the image**. A recovery failure
 must leave the component in a visible degraded/safe placeholder state rather
 than falsely reporting normal.
+
+---
+
+## Project complete
+
+All seven gates pass, last re-run in sequence on **2026-10-19** followed by a
+68-assertion sweep of one live stack and 21/21 on evidence persistence; see the
+[validation record](status.md#full-ladder-re-verification--2026-10-19-utc).
+Against the completion criteria in
+[architecture.md](architecture.md#completion-criteria): one OBC cFS instance
+runs three isolated placeholder apps; each has a verified UDP path to its own
+independently managed simulator; all logs are separated and persistent;
+scheduled activity is validated against declared rates; and failures can be
+observed, isolated, and recovered.
+
+**What remains deliberately out of scope**, and is documented rather than
+claimed: the app function bodies are skeletons (no ADCS control, payload
+processing or radio protocol), and CPU-hog detection and HS watchdog arming are
+unavailable in this container. See [status.md](status.md).

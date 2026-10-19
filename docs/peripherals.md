@@ -134,6 +134,17 @@ routing, which is a separate claim requiring separate evidence.
 
 ## Behavior worth knowing
 
+**Two distinct controller failure signatures.** A *stopped* container and a
+*disconnected* one are different faults and Phase 6 asserts both separately:
+
+| Fault | Container | Alias | Probe result |
+|---|---|---|---|
+| `docker stop` | gone | withdrawn | exit 5, `resolve-failed` |
+| `docker network disconnect` | alive | withdrawn from that network | nonzero; the container keeps running |
+
+A timeout rather than a resolution failure means the container is *running but
+not answering* — a third, different fault.
+
 **A stopped controller fails as a name-resolution error, not a timeout.** Docker's
 embedded DNS withdraws the alias as soon as the container stops, so the probe
 returns exit 5 (`reason=resolve-failed`) rather than exit 3. Phase 6 and Phase 7
